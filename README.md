@@ -1,4 +1,4 @@
-# 🌍 AI-tinerary — LangGraph Multi-Agent Travel Planne
+# 🌍 AI-tinerary — LangGraph Multi-Agent Travel Planner
 
 > **Plan your entire trip in one message.** AI-tinerary uses a pipeline of specialized AI agents to research flights, build day-wise itineraries, plan transportation, find hotels, preserve trip history, and deliver a complete travel guide — all automatically.
 
