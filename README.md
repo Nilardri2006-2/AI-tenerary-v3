@@ -1,37 +1,49 @@
-# 🌍 AI-tinerary — LangGraph Multi-Agent Travel Planne
+# 🌍 AI-tinerary — LangGraph Multi-Agent Travel Planner
 
-> **Plan your entire trip in one message.** AI-tinerary uses a pipeline of specialized AI agents to research flights, build day-wise itineraries, plan transportation, find hotels, preserve trip history, and deliver a complete travel guide — all automatically.
+> **Plan your entire trip in one message.** AI-tinerary uses a pipeline of specialized AI agents to check the weather, research flights, build day-wise itineraries, plan transportation, find hotels, preserve trip history, and deliver a complete travel guide — all automatically.
 
-## 🔗 Live Demo → [AI-tinerary](https://aiiteneraryv2.vercel.app)
+## 🔗 Live Links
+
+| | |
+|---|---|
+| 🎨 **Frontend (Live Demo)** | [ai-tenerary-v3.vercel.app](https://ai-tenerary-v3.vercel.app/) |
+| ⚡ **Backend API** | [ai-tenerary-v3.onrender.com](https://ai-tenerary-v3.onrender.com) |
+| 📖 **API Docs (Swagger)** | [ai-tenerary-v3.onrender.com/docs](https://ai-tenerary-v3.onrender.com/docs) |
 
 ---
 
 ## 📸 Preview
-![Preview](https://github.com/Nilardri2006/AI-tinerary/blob/main/preview.png?raw=true)
+
+![Preview](./preview.png)
+
+> Add a screenshot of the app as `preview.png` in the repo root — it will render automatically here.
 
 ```
 User: "Plan a 5-day trip from Kolkata to Manali in November under ₹30,000"
 
 AI-tinerary:
-  ✈️ Flight Agent     → searches live flight options
-  🗺️ Itinerary Agent  → builds day-wise plan + extracts places
-  🚌 Transport Agent  → plans local & intercity transport
-  🏨 Hotel Agent      → finds best stay locations via Tavily
-  📋 Final Agent      → compiles polished travel guide
-  📸 Image Agent      → fetches Wikipedia photos of every place
+  🌤️ Weather Agent    → fetches current weather + forecast for the destination
+  ✈️ Flight Agent      → searches live flight options
+  🗺️ Itinerary Agent   → builds day-wise plan + extracts places
+  🚌 Transport Agent   → plans local & intercity transport
+  🏨 Hotel Agent        → finds best stay locations via Tavily
+  📸 Image Agent        → fetches Wikipedia photos of every place
+  📋 Final Agent        → compiles a polished travel guide
 ```
 
 ---
 
 ## 🕘 Trip History
 
-AI-tinerary now keeps a persistent history of your travel conversations using thread-based memory.
+AI-tinerary keeps a persistent history of your travel conversations using thread-based memory.
 
 - 🧾 **Conversation history** — revisit previous travel planning sessions.
 - 🔄 **Persistent threads** — each trip can be continued using its `thread_id`.
 - 🧠 **Context-aware follow-ups** — continue a trip without starting from scratch.
 - 🗂️ **Previous trip access** — keep multiple travel plans available for later reference.
 - 🗄️ **PostgreSQL-backed persistence** — trip state is stored through the LangGraph checkpointer.
+
+---
 
 ## 🚀 Why AI-tinerary is Better
 
@@ -41,6 +53,7 @@ AI-tinerary now keeps a persistent history of your travel conversations using th
 | Full itinerary + transport + hotels | ✅ All-in-one | ⚠️ Manual prompting | ⚠️ Separate searches |
 | Persistent memory (PostgreSQL) | ✅ Remembers your trip | ❌ Session only | ❌ No context |
 | Trip history | ✅ Revisit previous trips | ❌ Limited | ⚠️ Account/order based |
+| Live weather agent | ✅ Current + forecast | ❌ No live data | ❌ Not included |
 | Place images (Wikipedia) | ✅ Auto-fetched | ❌ No images | ✅ Manual listings |
 | Live web search (Tavily) | ✅ Real-time hotels | ❌ Knowledge cutoff | ✅ Live listings |
 | Open source & self-hostable | ✅ Full control | ❌ Closed API | ❌ Closed platform |
@@ -51,79 +64,43 @@ AI-tinerary now keeps a persistent history of your travel conversations using th
 
 ## 🏗️ Architecture
 
-```
-User Message
-     │
-     ▼
-┌─────────────┐
-│ Flight Agent │  → search_flights() tool
-└──────┬──────┘
-       │
-       ▼
-┌──────────────────┐
-│ Itinerary Agent  │  → Groq LLaMA 3.3 70B (day-wise plan + place extraction)
-└──────┬───────────┘
-       │
-   ┌───┴────┐
-   ▼        ▼
-┌────────┐ ┌───────────────┐
-│ Image  │ │ Transport      │  → Groq LLaMA 3.3 70B
-│ Agent  │ │ Agent (mtrn)   │
-└───┬────┘ └──────┬────────┘
-    │              │
-    │         ┌────▼──────┐
-    │         │ Hotel      │  → Tavily Search (real-time)
-    │         │ Agent      │
-    │         └────┬───────┘
-    │              │
-    └──────┬───────┘
-           ▼
-    ┌─────────────┐
-    │ Final Agent  │  → Groq LLaMA 3.3 70B (complete travel guide)
-    └──────┬──────┘
-           │
-           ▼
-    FastAPI Response → React Frontend
-```
-
-### Updated Multi-Agent Graph
-
-The current LangGraph workflow includes a dedicated **Weather Agent** and uses parallel branches to gather travel information before the final response is generated.
+The LangGraph workflow runs a **Weather Agent** and the main planning branch in parallel, then fans the itinerary out into image, transport, and hotel agents before compiling everything into one final response.
 
 ```text
-                         ┌──→ Weather Agent ──────────────┐
-                         │                                │
-START ──→ Flight Agent ──→ Itinerary Agent                │
-                              │                           │
-                       ┌──────┴──────┐                    │
-                       ↓             ↓                    │
-                 Image Agent    Transport Agent           │
-                       │             ↓                    │
-                       │        Hotel Agent ──────────────┤
-                       │                                  │
-                       └──────────────┬───────────────────┘
+                         ┌──→ Weather Agent ───────────────┐
+                         │                                 │
+START ──→ Flight Agent ──→ Itinerary Agent                 │
+                              │                             │
+                       ┌──────┴──────┐                      │
+                       ↓             ↓                      │
+                 Image Agent    Transport Agent (mtrn)      │
+                       │             ↓                      │
+                       │        Hotel Agent ─────────────────┤
+                       │                                     │
+                       └──────────────┬──────────────────────┘
                                       ↓
                                 Final Agent
                                       ↓
                                      END
 ```
 
-**Graph nodes:**
-- ✈️ **Flight Agent** — searches flight information.
-- 🗺️ **Itinerary Agent** — creates the day-wise itinerary and extracts places.
-- 🚌 **Transport Agent** — plans local and intercity transportation.
-- 🏨 **Hotel Agent** — finds accommodation using Tavily.
-- 📸 **Image Agent** — fetches images for itinerary locations.
-- 🌤️ **Weather Agent** — retrieves weather information for the destination.
-- 📋 **Final Agent** — combines the gathered information into the final travel guide.
+**Graph nodes (`backend.py`):**
+- 🌤️ **Weather Agent** — resolves the destination city and fetches current weather + a forecast via the MCP weather/forecast tools.
+- ✈️ **Flight Agent** — searches flight information for the route in the user's query.
+- 🗺️ **Itinerary Agent** — asks the LLM for a full day-wise itinerary, then runs a structured-output pass to extract every unique place mentioned.
+- 📸 **Image Agent** — fetches a Wikipedia image for each extracted place.
+- 🚌 **Transport Agent (`mtrn_agent`)** — builds a from → to transportation plan (mode, duration, cost, notes) covering the whole trip, from arrival to local sightseeing.
+- 🏨 **Hotel Agent** — has the LLM pick the ideal stay location(s), then runs a live Tavily MCP search for real hotels in that area.
+- 📋 **Final Agent** — merges weather, flights, itinerary, places, transport, and hotels into one polished Markdown travel guide.
 
-The graph uses parallel execution where appropriate, allowing independent travel data such as weather and the main planning branches to be processed concurrently.
+Weather and Flights start in parallel at `START`; Images and Transport both branch off the Itinerary Agent and rejoin before the Final Agent runs.
 
 **Tech Stack:**
-- 🧠 **LLM:** Groq (LLaMA 3.3 70B) — fast inference, free tier available
-- 🔗 **Orchestration:** LangGraph (stateful multi-agent graph)
-- 🌐 **Web Search:** Tavily API (real-time hotel search)
-- 🗄️ **Memory & History:** PostgreSQL via LangGraph checkpointer (persistent threads and trip history)
+- 🧠 **LLM:** Groq (`llama-3.3-70b-versatile`) — fast inference, free tier available
+- 🔗 **Orchestration:** LangGraph (stateful multi-agent graph, `StateGraph`)
+- 🌐 **Web Search:** Tavily API (real-time hotel search, via MCP)
+- 🌤️ **Weather:** MCP weather/forecast tools (`mcp_client.py`)
+- 🗄️ **Memory & History:** PostgreSQL via `PostgresSaver` (LangGraph checkpointer — persistent threads and trip history)
 - 📸 **Images:** Wikipedia API (free, no key needed)
 - ⚡ **Backend:** FastAPI + Uvicorn
 - 🎨 **Frontend:** React + Vite
@@ -141,6 +118,7 @@ AI-tinerary/
 │   │   ├── flight.py          # Flight search tool
 │   │   ├── tavily.py          # Tavily web search
 │   │   └── wiki.py            # Wikipedia image fetcher
+│   ├── mcp_client.py          # Weather / forecast / Tavily MCP helpers
 │   ├── src/
 │   ├── static/
 │   ├── templates/
@@ -262,7 +240,15 @@ docker compose down -v
 
 ---
 
-## ☁️ Deploy — Render + Vercel (Free)
+## ☁️ Deployment (Live)
+
+This project is deployed and live:
+
+| Service | Platform | URL |
+|---|---|---|
+| 🎨 Frontend | Vercel | [ai-tenerary-v3.vercel.app](https://ai-tenerary-v3.vercel.app/) |
+| ⚡ Backend | Render | [ai-tenerary-v3.onrender.com](https://ai-tenerary-v3.onrender.com) |
+| 🗄️ Database | Render PostgreSQL | — |
 
 ### Backend → Render Web Service
 
@@ -284,6 +270,8 @@ TAVILY_API_KEY    = your_tavily_key
 DATABASE_URL      = your_render_postgres_url
 ```
 
+> ⚠️ Render free-tier web services spin down when idle — the first request after inactivity may take 30–60s to wake the backend up.
+
 ### Frontend → Vercel
 
 1. Go to [vercel.com](https://vercel.com) → **New Project**
@@ -296,6 +284,7 @@ DATABASE_URL      = your_render_postgres_url
 | **Framework Preset** | `Vite` |
 | **Build Command** | `npm run build` |
 | **Output Directory** | `dist` |
+| **Env Variable** | `VITE_API_URL=https://ai-tenerary-v3.onrender.com` |
 
 4. Click **Deploy** → live in 2 minutes ✅
 
@@ -313,7 +302,7 @@ DATABASE_URL      = your_render_postgres_url
 
 ## 🕘 History & Continuing Trips
 
-The travel API uses `thread_id` to persist a trip conversation. Reusing the same `thread_id` allows AI-tinerary to continue the previous travel context instead of creating a completely new session.
+The travel API uses `thread_id` to persist a trip conversation. Reusing the same `thread_id` lets AI-tinerary continue the previous travel context instead of starting a completely new session.
 
 ```json
 {
@@ -324,7 +313,11 @@ The travel API uses `thread_id` to persist a trip conversation. Reusing the same
 
 This makes it possible to build a trip progressively through multiple messages while keeping the previous conversation context available.
 
+---
+
 ## 📡 API Reference
+
+**Base URL (Live):** `https://ai-tenerary-v3.onrender.com`
 
 ### `POST /api/travel`
 
@@ -342,18 +335,22 @@ This makes it possible to build a trip progressively through multiple messages w
   "success": true,
   "thread_id": "user_abc123...",
   "answer": "## Trip Overview...",
+  "weather_results": "## Current Weather...",
   "flight_results": "Flight options...",
   "hotel_results": "Hotel recommendations...",
   "itinerary": "Day 1: ...",
   "images": [
     {"title": "Baga Beach", "url": "https://upload.wikimedia.org/..."}
   ],
-  "llm_calls": 7
+  "llm_calls": 8
 }
 ```
 
 ### `GET /health`
 Returns `{"status": "ok"}` — use this to verify the backend is alive.
+
+Full interactive docs (Swagger UI) are available at `/docs` on the live backend:
+👉 [ai-tenerary-v3.onrender.com/docs](https://ai-tenerary-v3.onrender.com/docs)
 
 ---
 
@@ -377,6 +374,7 @@ MIT License — free to use, modify, and distribute.
 
 Built with ❤️ using LangGraph, Groq, FastAPI, and React.
 
-**🔗 Live Demo → [AI-tinerary.app](https://aiiteneraryv2.vercel.app)**
+**🔗 Live Demo → [ai-tenerary-v3.vercel.app](https://ai-tenerary-v3.vercel.app/)**
+**⚡ Live Backend → [ai-tenerary-v3.onrender.com](https://ai-tenerary-v3.onrender.com)**
 
 > ⭐ Star this repo if AI-tinerary helped you plan a trip!
