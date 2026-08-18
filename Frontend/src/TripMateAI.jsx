@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
-const API_BASE = "http://127.0.0.1:8000";
-// const API_BASE = "https://ai-tenerary-v3.onrender.com";
+// const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://ai-tenerary-v3.onrender.com";
 const STORAGE_KEY = "aitinerary_searches";
 const MAX_SEARCHES = 10;
 
