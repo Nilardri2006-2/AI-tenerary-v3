@@ -14,7 +14,7 @@
 
 ## 📸 Preview
 
-![Preview](./preview.png)
+![Preview](./Preview.png)
 
 > Add a screenshot of the app as `preview.png` in the repo root — it will render automatically here.
 
