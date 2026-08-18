@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
 const API_BASE = "http://127.0.0.1:8000";
+// const API_BASE = "https://ai-tenerary-v3.onrender.com";
 const STORAGE_KEY = "aitinerary_searches";
 const MAX_SEARCHES = 10;
 
@@ -14,7 +15,9 @@ const AGENTS = [
 ];
 
 // ── markdown renderer ─────────────────────────────────────────────────────────
-function md(text = "") {
+function md(text) {
+  if (!text) return "";
+  text = String(text);
   return text
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
@@ -40,15 +43,27 @@ function saveSearch(query, result) {
       query,
       date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
       time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-      result,
+      result: {
+        answer:          (result.answer        || "").slice(0, 3000),
+        weather_results: (result.weather_results|| "").slice(0, 500),
+        flight_results:  (result.flight_results || "").slice(0, 1000),
+        hotel_results:   (result.hotel_results  || "").slice(0, 1000),
+        itinerary:       (result.itinerary      || "").slice(0, 3000),
+        images:          (result.images         || []).slice(0, 6),
+        llm_calls:       result.llm_calls       || 0,
+        thread_id:       result.thread_id       || "",
+      }
     };
-    // remove duplicate query if exists
     const filtered = searches.filter(s => s.query.toLowerCase() !== query.toLowerCase());
     const updated = [entry, ...filtered].slice(0, MAX_SEARCHES);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     return updated;
-  } catch { return loadSearches(); }
+  } catch (e) {
+    console.warn("saveSearch failed:", e);
+    return loadSearches();
+  }
 }
+
 
 function deleteSearch(id) {
   try {
@@ -360,6 +375,10 @@ export default function TripMateAI() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  useEffect(() => {
+    fetch(`${API_BASE}/health`).catch(() => {});
+  }, []);
+
   function simulatePipeline() {
     const sequence = [
       { agent: "weather",   delay: 0 },
@@ -591,13 +610,19 @@ export default function TripMateAI() {
           </div>
         )}
 
-        {result && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%", overflow: "auto" }}>
-            {result.weather_results && <WeatherCard weather={result.weather_results} />}
-            <ImageGallery images={result.images || []} onImageClick={setLightboxImg} />
-            <ResultTabs result={result} query={currentQuery} onExportPDF={exportPDF} />
-          </div>
-        )}
+{result && (() => {
+  try {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%", overflow: "auto" }}>
+        {result.weather_results && <WeatherCard weather={result.weather_results} />}
+        <ImageGallery images={result.images || []} onImageClick={setLightboxImg} />
+        <ResultTabs result={result} query={currentQuery} onExportPDF={exportPDF} />
+      </div>
+    );
+  } catch(e) {
+    return <div style={{color:"#EF4444",padding:20}}>⚠️ Display error: {String(e.message)}</div>;
+  }
+})()}
       </div>
 
       <style>{`
