@@ -6,6 +6,7 @@ import operator
 import uuid
 import time
 import json
+import re
 
 import psycopg
 from psycopg.rows import dict_row
@@ -52,16 +53,29 @@ if not COHERE_API_KEY:
 # =========================
 
 def extract_text(content) -> str:
-    """Extract plain string from Cohere's list-of-dicts content format."""
+    """Extract plain string from Cohere's list-of-dicts content format.
+
+    FIX: Cohere can return extra block types in the content list besides
+    the actual answer -- most commonly 'reasoning' blocks (internal
+    chain-of-thought). Those blocks don't have a top-level 'text' key, so
+    previously they fell through to str(item) and dumped the raw dict
+    (with 'type', 'id', 'summary', etc.) straight into user-facing output.
+    We now skip any non-'text' block types and only keep the real answer.
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         parts = []
         for item in content:
             if isinstance(item, dict):
-                parts.append(item.get("text", str(item)))
-            else:
-                parts.append(str(item))
+                item_type = item.get("type")
+                if item_type is not None and item_type != "text":
+                    continue
+                text = item.get("text")
+                if text:
+                    parts.append(text)
+            elif isinstance(item, str):
+                parts.append(item)
         return "\n".join(parts)
     return str(content)
 
@@ -131,11 +145,15 @@ def format_hotel_results(raw) -> str:
 # =========================
 # LLM
 # =========================
+# FIX: max_tokens was previously unset, so Cohere fell back to a low
+# default and truncated long outputs (this is why your final travel guide
+# was cutting off mid-sentence, e.g. "...New Gitanjali"). Set explicitly.
 
 llm = ChatCohere(
     api_key=COHERE_API_KEY,
     temperature=0.4,
     model="command-a-plus-05-2026",
+    max_tokens=4096,
 )
 
 
@@ -208,6 +226,62 @@ def flight_agent(state: TravelState):
 
 
 # =========================
+# Places Extraction (manual — see note in itinerary_agent)
+# =========================
+
+def extract_places_from_itinerary(itinerary: str) -> list[str]:
+    """Ask the LLM for a plain JSON array of places and parse it manually.
+
+    FIX: We deliberately avoid llm.with_structured_output() here. Its
+    automatic validation-retry mechanism appends the previous error message
+    onto the next prompt when the model returns a borderline-invalid item
+    (e.g. a food adjective like "Goan" picked up from "Goan fish curry" and
+    mistaken for a place). The model then tries to "fix" it by
+    second-guessing every other food-adjacent word, and each retry grows
+    the error string further, compounding until parsing fails outright
+    (OUTPUT_PARSING_FAILURE). Doing the JSON parsing ourselves, with a
+    simple regex fallback, avoids that retry spiral entirely.
+    """
+    prompt = f"""
+Extract every unique physical PLACE mentioned in this itinerary,
+attractions, landmarks, restaurants, beaches, temples, markets,
+viewpoints, museums, parks, or neighborhoods.
+
+Do NOT include food dishes, drinks, cuisines, or regional adjectives
+(for example "Goan", "Indian", "local", "Bengali") as standalone
+entries, those describe food, not places.
+
+Respond with ONLY a raw JSON array of strings. No markdown, no code
+fences, no explanation.
+Example: ["Baga Beach", "Fort Aguada", "Anjuna Market"]
+
+Itinerary:
+{itinerary}
+"""
+    try:
+        response = llm.invoke(prompt)
+        text = extract_text(response.content).strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
+        places = json.loads(text)
+        if isinstance(places, list):
+            cleaned = [p.strip() for p in places if isinstance(p, str) and p.strip()]
+            if cleaned:
+                return cleaned
+    except Exception as e:
+        print(f"⚠️ Places JSON parse failed, falling back to regex: {e}")
+
+    skip_words = {"goan", "indian", "local", "bengali", "day", "morning",
+                  "afternoon", "evening", "note", "tip", "budget"}
+    candidates = re.findall(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b", itinerary)
+    seen, fallback = set(), []
+    for c in candidates:
+        if c not in seen and c.lower() not in skip_words:
+            seen.add(c)
+            fallback.append(c)
+    return fallback[:25]
+
+
+# =========================
 # Itinerary Agent
 # =========================
 
@@ -234,18 +308,12 @@ Instructions:
     response1 = llm.invoke(prompt)
     itinerary = extract_text(response1.content)
 
-    structured_llm = llm.with_structured_output(PlacesResponse)
-    response2 = structured_llm.invoke(f"""
-Extract every unique place mentioned in this itinerary.
-
-Itinerary:
-{itinerary}
-""")
-    print(response2.places)
+    places = extract_places_from_itinerary(itinerary)
+    print(places)
 
     return {
         "itinerary": itinerary,
-        "places": response2.places,
+        "places": places,
         "messages": [AIMessage(content=itinerary)],
         "llm_calls": 2,
     }
